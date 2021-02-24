@@ -47,6 +47,22 @@ def get_ai_2():
     )
     return model
 
+def get_predictive_ai():
+    inputs = keras.Input(shape=(None, 1))
+    init_h = keras.Input(shape=(1,))
+    init_c = keras.Input(shape=(1,))
+
+    lstm = layers.LSTM(1, return_state=True)
+    x, state_h, state_c = lstm(inputs, initial_state=[init_h, init_c])
+
+    model = keras.Model(inputs=[inputs, init_h, init_c], outputs=[x, state_h, state_c])
+    model.compile(
+        optimizer=tf.optimizers.Adam(),
+        loss=tf.keras.losses.CategoricalCrossentropy(),
+        metrics=['acc']
+    )
+    return model
+
 def test_ai(model, data, min_ok, max_ok):
     for test in data:
         t = np.array([[map(test, min_ok, max_ok, 0, 1)]])
