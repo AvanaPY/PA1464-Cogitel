@@ -47,21 +47,16 @@ def get_ai_2():
     )
     return model
 
-def get_predictive_ai():
+def get_predictive_ai(state_size):
     inputs = keras.Input(shape=(None, 1))
-    init_h = keras.Input(shape=(1,))
-    init_c = keras.Input(shape=(1,))
+    init_h = keras.Input(shape=(None,))
+    init_c = keras.Input(shape=(None,))
 
-    lstm = layers.LSTM(1, return_state=True)
+    lstm = layers.LSTM(state_size, return_state=True)
     x, state_h, state_c = lstm(inputs, initial_state=[init_h, init_c])
+    x = layers.Dense(1, activation='relu')(x)
 
-    model = keras.Model(inputs=[inputs, init_h, init_c], outputs=[x, state_h, state_c])
-    model.compile(
-        optimizer=tf.optimizers.Adam(),
-        loss=tf.keras.losses.CategoricalCrossentropy(),
-        metrics=['acc']
-    )
-    return model
+    return keras.Model(inputs=[inputs, init_h, init_c], outputs=[x, state_h, state_c])
 
 def test_ai(model, data, min_ok, max_ok):
     for test in data:

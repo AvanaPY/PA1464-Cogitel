@@ -4,14 +4,19 @@ import sys
 import signal
 import time
 import numpy as np
+import itertools
+import matplotlib.pyplot as plt
 
 from demo_ai import get_predictive_ai as get_ai, train_ai, load_ai, map
 
 from flask import jsonify
 from web.app import get_app
+import math
 app = get_app()
 
 BASE_DIR = os.path.dirname(__file__)
+import tensorflow as tf
+from tensorflow import keras
 
 from threading import Thread
 
@@ -65,26 +70,84 @@ def api_predict(value):
         print(str(e))
         return jsonify({ "status": "error", "message": "Internal server error" })
 
+def convert_to_seq_data(data, min_val, max_val, seq_length=4):
+    X = []
+    Y = []
+    sequences = len(data) - seq_length - 1
+    for i in range(sequences):
+        sequence = data[i:i+seq_length+1]
+        X.append([[i] for i in sequence[:-1]])
+        Y.append([[i] for i in sequence[1:]])
+
+    return np.asarray(X).astype('float32'), np.asarray(Y).astype('float32')
+
 import random
-data = [[[map(25, 22, 28, 0, 1)] for _ in range(2)]]
+seq_length = 15
+state_size = 256
+BATCH_SIZE = 64
+EPOCHS = 50
+normal_distrib = np.random.normal(0.5, 0.2, size=1000)
+X, Y = convert_to_seq_data(normal_distrib, 0.1, 0.9, seq_length=seq_length)
 
-ai = get_ai()
-ai.summary()
+ai = get_ai(state_size)
 
-d = np.asarray([[data[0][0]]]).astype('float32')
-h = np.zeros(shape=(1, 1))
-c = np.zeros(shape=(1, 1))
 
-x, h, c = ai.predict([ np.asarray(data).astype('float32'), h, c])
+loss_fn = tf.keras.losses.MeanSquaredError()
+optimizer = keras.optimizers.Adam()
 
-print("x: ", x)
-print("c: ", c)
-print()
-x, h, c = ai.predict([ np.asarray(data).astype('float32'), h, c])
-# x, h, c = ai.predict([ d, h, c])
-print("new x:", x)
-print("new c:", c)
-print()
+prev_loss = 0
+print('Initializing training...')
+for epoch in range(EPOCHS):
+    epoch_loss = 0
+    for batch in range(0, len(X), BATCH_SIZE):
+        x_batch, y_batch = X[batch:batch+BATCH_SIZE], Y[batch:batch+BATCH_SIZE]
+        loss_total = 0
+        for i, (x, y) in enumerate(zip(x_batch, y_batch)):
+            with tf.GradientTape() as tape:
+                h = np.zeros(shape=(seq_length, state_size))
+                c = np.zeros(shape=(seq_length, state_size))
+                logits, _, _ = ai([x, h, c], training=True)
+                loss_value = loss_fn(y, logits)
+                loss_total += float(loss_value)
+                if (batch == 0 and i == 0):
+                    print('\nPred: ', ' '.join([f'{float(j[0]):.4f}' for j in logits]))
+                    print('True: ', ' '.join([f'{j[0]:.4f}' for j in y]))
+                    print('Loss: ', float(loss_value), '-' if float(loss_value) < prev_loss else '+')
+                    print()
+                    prev_loss = float(loss_value)
+            grads = tape.gradient(loss_value, ai.trainable_weights)
+            optimizer.apply_gradients(zip(grads, ai.trainable_weights))
+
+        batch_num = batch // BATCH_SIZE
+        if batch // BATCH_SIZE % 10 == 0 or batch_num == math.floor(len(X) / BATCH_SIZE) - 1:
+            print(f'-- BATCH {batch // BATCH_SIZE:3} completed with loss: {loss_total}')
+            epoch_loss += loss_total
+    print(f'## EPOCH {epoch:3} completed with loss: {epoch_loss}')
+print('Training complete.')
+
+norm = normal_distrib[:seq_length+2]
+X, _ = convert_to_seq_data(norm, 0.1, 0.9, seq_length=seq_length)
+X = X[0]
+h = np.zeros(shape=(seq_length, state_size))
+c = np.zeros(shape=(seq_length, state_size))
+
+# print(np.asarray(X).shape)
+# print(h.shape)
+
+data = [v[0] for v in X]
+X, h, c = ai.predict([X, h, c])
+
+x, h, c = np.asarray([X[-1]]), np.asarray([h[-1]]), np.asarray([c[-1]])
+for _ in range(seq_length):
+    # print(x.shape, h.shape, c.shape)
+    x, h, c = ai.predict([x, h, c])
+    data.append(x[-1][0])
+
+plt.plot(normal_distrib[:seq_length*2])
+plt.plot(data)
+plt.show()
+
+
 
 # server = Thread(target=app.run)
 # server.daemon = True
