@@ -54,7 +54,8 @@ def get_predictive_ai(state_size):
 
     lstm = layers.LSTM(state_size, return_state=True)
     x, state_h, state_c = lstm(inputs, initial_state=[init_h, init_c])
-    x = layers.Dense(1, activation='relu')(x)
+    x = layers.Dense(24, activation='relu')(x)
+    x = layers.Dense(1, activation='linear')(x)
 
     return keras.Model(inputs=[inputs, init_h, init_c], outputs=[x, state_h, state_c])
 

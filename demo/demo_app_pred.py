@@ -82,15 +82,14 @@ def convert_to_seq_data(data, min_val, max_val, seq_length=4):
     return np.asarray(X).astype('float32'), np.asarray(Y).astype('float32')
 
 import random
-seq_length = 15
-state_size = 256
-BATCH_SIZE = 64
-EPOCHS = 50
-normal_distrib = np.random.normal(0.5, 0.2, size=1000)
+seq_length = 32
+state_size = 64
+BATCH_SIZE = 128
+EPOCHS = 10
+normal_distrib = np.random.normal(0.5, 0.2, size=10000)
 X, Y = convert_to_seq_data(normal_distrib, 0.1, 0.9, seq_length=seq_length)
 
 ai = get_ai(state_size)
-
 
 loss_fn = tf.keras.losses.MeanSquaredError()
 optimizer = keras.optimizers.Adam()
@@ -99,29 +98,47 @@ prev_loss = 0
 print('Initializing training...')
 for epoch in range(EPOCHS):
     epoch_loss = 0
-    for batch in range(0, len(X), BATCH_SIZE):
-        x_batch, y_batch = X[batch:batch+BATCH_SIZE], Y[batch:batch+BATCH_SIZE]
+    BATCHES = math.ceil(len(X) / BATCH_SIZE)
+    for i in range(BATCHES):
+        batch_x, batch_y = X[i * BATCH_SIZE:(i+1)*BATCH_SIZE], Y[i * BATCH_SIZE:(i+1)*BATCH_SIZE]
+        batch_y = [[y[-1][0]] for y in batch_y]
         loss_total = 0
-        for i, (x, y) in enumerate(zip(x_batch, y_batch)):
-            with tf.GradientTape() as tape:
-                h = np.zeros(shape=(seq_length, state_size))
-                c = np.zeros(shape=(seq_length, state_size))
-                logits, _, _ = ai([x, h, c], training=True)
-                loss_value = loss_fn(y, logits)
-                loss_total += float(loss_value)
-                if (batch == 0 and i == 0):
-                    print('\nPred: ', ' '.join([f'{float(j[0]):.4f}' for j in logits]))
-                    print('True: ', ' '.join([f'{j[0]:.4f}' for j in y]))
-                    print('Loss: ', float(loss_value), '-' if float(loss_value) < prev_loss else '+')
-                    print()
-                    prev_loss = float(loss_value)
-            grads = tape.gradient(loss_value, ai.trainable_weights)
-            optimizer.apply_gradients(zip(grads, ai.trainable_weights))
+        with tf.GradientTape() as tape:
+            h = np.zeros(shape=(len(batch_x), state_size))
+            c = np.zeros(shape=(len(batch_x), state_size))
+            logits, _, _ = ai([batch_x, h, c], training=True)
+            loss_value = loss_fn(batch_y, logits)
+            loss_total += float(loss_value)
+        grads = tape.gradient(loss_value, ai.trainable_weights)
+        optimizer.apply_gradients(zip(grads, ai.trainable_weights))
+        if i == 0:
+            print(loss_total)
 
-        batch_num = batch // BATCH_SIZE
-        if batch // BATCH_SIZE % 10 == 0 or batch_num == math.floor(len(X) / BATCH_SIZE) - 1:
-            print(f'-- BATCH {batch // BATCH_SIZE:3} completed with loss: {loss_total}')
-            epoch_loss += loss_total
+    # for i, (x, y) in enumerate(zip(X, Y)):
+    #     with tf.GradientTape() as tape:
+    #         h = np.zeros(shape=(seq_length, state_size))
+    #         c = np.zeros(shape=(seq_length, state_size))
+
+    #         logits, _, _ = ai([x, h, c], training=True)
+    #         loss_value = loss_fn(y, logits)
+    #         loss_total += float(loss_value)
+
+    #         print(x.shape, logits.shape)
+    #         exit()
+
+    #         if i % 500 == 0:
+    #             print('\nPred: ', ' '.join([f'{float(j[0]):.4f}' for j in logits]))
+    #             print('True: ', ' '.join([f'{j[0]:.4f}' for j in y]))
+    #             print('Loss: ', float(loss_value), '-' if float(loss_value) < prev_loss else '+')
+    #             print()
+    #             prev_loss = float(loss_value)
+    #     grads = tape.gradient(loss_value, ai.trainable_weights)
+    #     optimizer.apply_gradients(zip(grads, ai.trainable_weights))
+
+        # batch_num = batch // BATCH_SIZE
+        # if batch // BATCH_SIZE % 10 == 0 or batch_num == math.floor(len(X) / BATCH_SIZE) - 1:
+        #     print(f'-- BATCH {batch // BATCH_SIZE:3} completed with loss: {loss_total}')
+        #     epoch_loss += loss_total
     print(f'## EPOCH {epoch:3} completed with loss: {epoch_loss}')
 print('Training complete.')
 
@@ -131,17 +148,20 @@ X = X[0]
 h = np.zeros(shape=(seq_length, state_size))
 c = np.zeros(shape=(seq_length, state_size))
 
-# print(np.asarray(X).shape)
+print(np.asarray(X).shape)
 # print(h.shape)
 
 data = [v[0] for v in X]
 X, h, c = ai.predict([X, h, c])
 
+print("Generating sequences")
 x, h, c = np.asarray([X[-1]]), np.asarray([h[-1]]), np.asarray([c[-1]])
 for _ in range(seq_length):
     # print(x.shape, h.shape, c.shape)
+    print(f"Input:  {x} | {h} {c}")
     x, h, c = ai.predict([x, h, c])
-    data.append(x[-1][0])
+    print(f'Output: {x} | {h} {c}\n')
+    data.append(x[0][0])
 
 plt.plot(normal_distrib[:seq_length*2])
 plt.plot(data)
